@@ -1,5 +1,5 @@
 // Network-first with cache fallback, so the app works with bad reception in a bar.
-const CACHE = 'drinks-v1';
+const CACHE = 'drinks-v3';
 const ASSETS = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

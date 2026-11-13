@@ -77,7 +77,8 @@
     border:1px solid var(--line);border-radius:999px}
 
   /* sheets */
-  .backdrop{position:fixed;inset:0;background:#000a;opacity:0;pointer-events:none;transition:.2s}
+  .backdrop{position:fixed;inset:0;background:#000a;opacity:0;pointer-events:none;transition:.2s;cursor:pointer}
+  .x{position:absolute;top:12px;left:12px;width:40px;height:40px;border-radius:50%;background:var(--card);color:var(--muted);font-size:20px;display:grid;place-items:center}
   .backdrop.open{opacity:1;pointer-events:auto}
   .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-radius:28px 28px 0 0;
     padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);transform:translateY(105%);transition:.25s ease;
@@ -144,6 +145,7 @@
 <div class="last" id="last"></div>
 
 <div class="list" id="list"></div>
+<button class="reset" id="shareBtn" hidden>📋 העתק סיכום ל-MyFitnessPal</button>
 <button class="reset" id="resetBtn" hidden>🌙 ערב חדש (איפוס כמויות)</button>
 
 <button class="fab" id="addBtn">＋ משקה חדש</button>
@@ -152,6 +154,7 @@
 
 <!-- create / edit drink -->
 <div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <button class="x" data-close aria-label="סגור">✕</button>
   <h2 id="sheetTitle">משקה חדש</h2>
   <div class="preview" id="preview"><div class="emoji" id="pvEmoji">🍺</div><div class="name" id="pvName">בירה</div></div>
   <div class="field">
@@ -181,6 +184,7 @@
 
 <!-- amount picker -->
 <div class="sheet" id="amtSheet" role="dialog" aria-modal="true">
+  <button class="x" data-close aria-label="סגור">✕</button>
   <h2 id="amtTitle">כמה?</h2>
   <div class="amounts" id="amounts"></div>
   <span class="lbl2">כמות אחרת (מ״ל)</span>
@@ -235,6 +239,7 @@
     $('totalCal').textContent = fmt(cal);
     $('last').textContent = state.last ? `🕒 אחרון: ${state.last.name} ${state.last.ml} מ״ל · ${fmtAgo(state.last.t)}` : '';
     $('resetBtn').hidden = total === 0 || editing;
+    $('shareBtn').hidden = total === 0 || editing;
     document.body.classList.toggle('editing', editing);
     $('editBtn').classList.toggle('on', editing);
     $('editBtn').textContent = editing ? 'סיום' : 'עריכה';
@@ -294,6 +299,23 @@
     else if (btn.dataset.act === 'dec' && d.pours.length){ d.pours.pop(); save(); render(); }
   });
 
+  $('shareBtn').onclick = async () => {
+    const used = state.drinks.filter(d => d.pours.length);
+    const cal = used.reduce((a,d)=>a+drinkCal(d),0);
+    const lines = used.map(d => {
+      const ml = d.pours.reduce((a,p)=>a+p.ml,0);
+      return `${d.name}: ${d.pours.length}× (${ml} מ״ל) – ${drinkCal(d)} קל׳`;
+    });
+    const text = [`סה״כ ${cal} קלוריות`, ...lines].join(String.fromCharCode(10));
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else { await navigator.clipboard.writeText(text); toast(`הועתק! ${cal} קל׳ ← Quick Add`); }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      try { await navigator.clipboard.writeText(text); toast(`הועתק! ${cal} קל׳ ← Quick Add`); } catch { prompt('העתק:', text); }
+    }
+  };
+
   $('editBtn').onclick = () => { editing = !editing; render(); };
 
   $('resetBtn').onclick = () => {
@@ -308,7 +330,9 @@
     document.activeElement && document.activeElement.blur();
     openSheetEl && openSheetEl.classList.remove('open'); $('backdrop').classList.remove('open'); openSheetEl = null;
   }
-  $('backdrop').onclick = hide;
+  $('backdrop').addEventListener('click', hide);
+  $('backdrop').addEventListener('touchend', e => { e.preventDefault(); hide(); });
+  document.querySelectorAll('[data-close]').forEach(b => b.onclick = hide);
 
   // amount picker
   let amtDrink = null;

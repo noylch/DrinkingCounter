@@ -126,6 +126,13 @@
   .custom{display:flex;gap:10px}
   .custom input{flex:1}
   .custom .btn{flex:none;width:96px}
+  .custom .btn.ghost{width:auto;padding:0 12px;font-size:14px}
+  .amt-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .achip{display:flex;align-items:center;gap:6px;height:40px;padding:0 6px 0 12px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:16px;font-weight:700}
+  .achip.def{background:var(--accent);color:#1a1000;border-color:transparent}
+  .achip .rm{width:28px;height:28px;border-radius:50%;background:#0003;font-size:13px;display:grid;place-items:center}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .info,.drink>.emoji{cursor:pointer}
 
   .toast{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:50%;transform:translate(-50%,-150%);
     background:#000d;padding:10px 16px;border-radius:999px;font-size:15px;transition:.25s;z-index:9;white-space:nowrap}
@@ -170,8 +177,17 @@
       <input type="number" id="fCal" inputmode="decimal" placeholder="43" min="0" max="1000" step="any"></div>
   </div>
   <div class="field">
+    <label>כמויות מהירות (מ״ל)</label>
+    <div class="amt-chips" id="fAmts"></div>
+    <div class="custom">
+      <input type="number" id="fAmtNew" inputmode="numeric" placeholder="למשל 25" min="1" max="5000">
+      <button class="btn primary" type="button" id="fAmtAdd">＋ הוסף</button>
+    </div>
+    <div class="hint">לחיצה על כמות = הופכת אותה לברירת מחדל ⭐ · ✕ = מחיקה</div>
+  </div>
+  <div class="field">
     <button class="switch" type="button" id="fAsk" style="width:100%;text-align:start">
-      <div><div class="t">לשאול כמות בכל הוספה</div><div class="d">מתאים לשוטים / כוסות לא קבועות. כבוי = ＋ מוסיף ישר את ברירת המחדל</div></div>
+      <div><div class="t">לשאול כמות בכל הוספה</div><div class="d">מתאים לשוטים / כוסות לא קבועות. כבוי = ＋ מוסיף ישר את ברירת המחדל. תמיד אפשר ללחוץ על שם המשקה לבחירת כמות</div></div>
       <div class="tog" id="fAskTog"></div>
     </button>
   </div>
@@ -191,6 +207,7 @@
   <span class="lbl2">כמות אחרת (מ״ל)</span>
   <div class="custom">
     <input type="number" id="amtCustom" inputmode="numeric" placeholder="מ״ל" min="1" max="5000">
+    <button class="btn ghost" id="amtSave">⭐ שמור ככפתור</button>
     <button class="btn primary" id="amtAdd">הוסף</button>
   </div>
 </div>
@@ -223,6 +240,8 @@
   const drinkCal = d => d.pours.reduce((a,p) => a + kcal(p.ml, d.cal), 0);
   const fmt = n => n.toLocaleString('he-IL');
   let editing = false;
+  const uniqSort = a => [...new Set(a.filter(n => n > 0 && n <= 5000))].sort((x,y)=>x-y);
+  const getAmounts = d => uniqSort([d.size, ...(d.amounts || amountOptions(d.size))]);
 
   function fmtAgo(ts){
     const m = Math.floor((Date.now()-ts)/60000);
@@ -256,7 +275,7 @@
         <div class="emoji">${d.emoji}</div>
         <div class="info">
           <div class="name">${esc(d.name)}</div>
-          <div class="sub">${d.ask ? 'כמות משתנה' : `${d.size} מ״ל · ${kcal(d.size,d.cal)} קל׳`}</div>
+          <div class="sub">${d.ask ? 'כמות משתנה' : `${d.size} מ״ל · ${kcal(d.size,d.cal)} קל׳`} · <u>כמות ▾</u></div>
           <div class="sub">סה״כ ${fmt(drinkCal(d))} קל׳</div>
         </div>
         <div class="ctrl">
@@ -295,7 +314,7 @@
       } else openSheet(d);
       return;
     }
-    if (!btn) return;
+    if (!btn){ if (e.target.closest('.info, .emoji')) openAmount(d); return; }
     if (btn.dataset.act === 'inc'){ d.ask ? openAmount(d) : addPour(d, d.size); }
     else if (btn.dataset.act === 'dec' && d.pours.length){ d.pours.pop(); save(); render(); }
   });
@@ -342,12 +361,16 @@
     const set = new Set([size, ...base]);
     return [...set].sort((a,b)=>a-b).slice(0,6);
   }
+  function paintAmounts(){
+    const d = amtDrink;
+    $('amounts').innerHTML = getAmounts(d).map(ml =>
+      `<button class="amt ${ml===d.size?'def':''}" data-ml="${ml}"><b>${ml}</b><span>מ״ל · ${kcal(ml,d.cal)} קל׳</span></button>`).join('');
+  }
   function openAmount(d){
     amtDrink = d;
+    paintAmounts();
     $('amtTitle').textContent = `${d.emoji} כמה ${d.name}?`;
     $('amtSheet').style.setProperty('--c', d.color);
-    $('amounts').innerHTML = amountOptions(d.size).map(ml =>
-      `<button class="amt ${ml===d.size?'def':''}" data-ml="${ml}"><b>${ml}</b><span>מ״ל · ${kcal(ml,d.cal)} קל׳</span></button>`).join('');
     $('amtCustom').value = '';
     show($('amtSheet'));
   }
@@ -359,6 +382,12 @@
     const ml = parseInt($('amtCustom').value,10);
     if (!(ml > 0 && ml <= 5000)){ $('amtCustom').focus(); return; }
     const d = amtDrink; hide(); addPour(d, ml);
+  };
+  $('amtSave').onclick = () => {
+    const ml = parseInt($('amtCustom').value,10);
+    if (!(ml > 0 && ml <= 5000)){ $('amtCustom').focus(); toast('כתוב כמות במ״ל'); return; }
+    amtDrink.amounts = uniqSort([...getAmounts(amtDrink), ml]);
+    save(); paintAmounts(); $('amtCustom').value = ''; toast(`נשמר כפתור ${ml} מ״ל`);
   };
 
   // create / edit
@@ -380,8 +409,33 @@
   $('presets').onclick = e => {
     const b = e.target.closest('.chip'); if (!b) return; const p = PRESETS[b.dataset.i];
     $('fName').value = p.name; $('fCal').value = p.cal; $('fSize').value = p.size;
-    Object.assign(form, { emoji:p.emoji, color:p.color, ask:p.ask }); paintForm();
+    Object.assign(form, { emoji:p.emoji, color:p.color, ask:p.ask, amounts: amountOptions(p.size) }); paintForm(); paintAmts();
   };
+  function paintAmts(){
+    const size = parseInt($('fSize').value,10);
+    form.amounts = uniqSort(form.amounts);
+    $('fAmts').innerHTML = form.amounts.length ? form.amounts.map(ml =>
+      `<span class="achip ${ml===size?'def':''}" data-ml="${ml}">${ml===size?'⭐ ':''}${ml}<button class="rm" type="button" aria-label="מחק">✕</button></span>`).join('')
+      : '<span class="hint">אין כמויות עדיין</span>';
+  }
+  $('fAmts').onclick = e => {
+    const chip = e.target.closest('.achip'); if (!chip) return; const ml = +chip.dataset.ml;
+    if (e.target.closest('.rm')){
+      form.amounts = form.amounts.filter(x => x !== ml);
+      if (parseInt($('fSize').value,10) === ml) $('fSize').value = form.amounts[0] || '';
+    } else $('fSize').value = ml;
+    paintAmts();
+  };
+  $('fAmtAdd').onclick = () => {
+    const ml = parseInt($('fAmtNew').value,10);
+    if (!(ml > 0 && ml <= 5000)){ $('fAmtNew').focus(); return; }
+    form.amounts.push(ml); if (!$('fSize').value) $('fSize').value = ml;
+    $('fAmtNew').value = ''; paintAmts();
+  };
+  $('fSize').addEventListener('change', () => {
+    const v = parseInt($('fSize').value,10); if (v > 0 && v <= 5000 && !form.amounts.includes(v)) form.amounts.push(v);
+    paintAmts();
+  });
   $('fName').oninput = paintForm;
   $('fName').addEventListener('keydown', e => { if (e.key === 'Enter') $('fSize').focus(); });
 
@@ -390,12 +444,13 @@
     $('presets').hidden = !!d;
     $('sheetTitle').textContent = d ? 'עריכת משקה' : 'משקה חדש';
     $('saveBtn').textContent = d ? 'שמור' : 'הוסף';
-    form = d ? { emoji:d.emoji, color:d.color, ask:d.ask }
-             : { emoji:'🍺', color: COLORS[state.drinks.length % COLORS.length], ask:false };
+    form = d ? { emoji:d.emoji, color:d.color, ask:d.ask, amounts: getAmounts(d) }
+             : { emoji:'🍺', color: COLORS[state.drinks.length % COLORS.length], ask:false, amounts: [] };
+    $('fAmtNew').value = '';
     $('fName').value = d ? d.name : '';
     $('fSize').value = d ? d.size : '';
     $('fCal').value = d ? d.cal : '';
-    paintForm(); show($('sheet'));
+    paintForm(); paintAmts(); show($('sheet'));
   }
   $('addBtn').onclick = () => openSheet();
   $('cancelBtn').onclick = hide;
@@ -405,7 +460,8 @@
     const size = parseInt($('fSize').value,10);
     if (!(size > 0 && size <= 5000)){ $('fSize').focus(); toast('צריך כמות ברירת מחדל במ״ל'); return; }
     const cal = Math.max(0, Math.min(1000, parseFloat($('fCal').value) || 0));
-    const data = { name, size, cal, ask: form.ask, emoji: form.emoji, color: form.color };
+    const amounts = uniqSort([size, ...(form.amounts.length ? form.amounts : amountOptions(size))]);
+    const data = { name, size, cal, ask: form.ask, emoji: form.emoji, color: form.color, amounts };
     if (editTarget) Object.assign(editTarget, data);
     else { state.drinks.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), pours: [], ...data }); editing = false; }
     save(); render(); hide();
